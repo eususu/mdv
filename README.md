@@ -1,4 +1,4 @@
-# MDB is markdown viewer
+# MDV is markdown viewer
 
 - Requiremenets: Windows, MacOS
 - Build Environment: tauri
