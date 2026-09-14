@@ -1,0 +1,1 @@
+{"identifier":"default","description":"Main viewer window","windows":["main"],"permissions":["core:default","dialog:allow-open","opener:allow-open-url"]}
