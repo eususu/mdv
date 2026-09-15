@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), openUrl: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: mocks.invoke, convertFileSrc: (path: string) => path }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ onDragDropEvent: vi.fn().mockResolvedValue(() => {}) }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.open }));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: mocks.openUrl }));
 
 const key = 'mdv-recent-files';
 const paths = () => JSON.parse(localStorage.getItem(key) || '[]');
@@ -21,6 +21,8 @@ async function openFile(path: string) {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  HTMLDialogElement.prototype.close = vi.fn();
+  HTMLDialogElement.prototype.showModal = vi.fn();
   localStorage.clear();
   localStorage.setItem('mdv-theme', 'light');
   document.body.innerHTML = '<div id="app"></div>';
@@ -89,4 +91,47 @@ describe('recent documents', () => {
       expect(document.querySelector<HTMLElement>('#error')!.hidden).toBe(true);
     } finally { storage.mockRestore(); }
   });
+});
+
+it('translates the current document, toggles cached text and ignores a response after navigation', async () => {
+  await start();
+  await openFile('/docs/a.md');
+  mocks.invoke.mockImplementation(async (command: string, args?: { path: string; texts: string[] }) => {
+    if (command === 'read_document') return { path: args!.path, content: '# Hello\n\nRead `code`.' };
+    if (command === 'translate_text') return args!.texts.map(text => text === 'Hello' ? '안녕하세요' : '읽기 ');
+    return null;
+  });
+  await openFile('/docs/english.md');
+  const button = document.querySelector<HTMLButtonElement>('#translate')!;
+  button.click();
+  await vi.waitFor(() => expect(document.querySelector('#document h1')!.textContent).toBe('안녕하세요'));
+  expect(document.querySelector('#toc a')!.textContent).toBe('안녕하세요');
+  expect(document.querySelector('#document code')!.textContent).toBe('code');
+  button.click();
+  expect(document.querySelector('#document h1')!.textContent).toBe('Hello');
+  button.click();
+  expect(mocks.invoke.mock.calls.filter(call => call[0] === 'translate_text')).toHaveLength(2);
+  await openFile('/docs/next.md');
+  let resolve!: (value: string[]) => void;
+  mocks.invoke.mockImplementationOnce(() => new Promise<string[]>(done => { resolve = done; }));
+  button.click();
+  await openFile('/docs/final.md');
+  resolve(['이전 번역', '이전 본문']);
+  await new Promise(done => setTimeout(done, 0));
+  expect(document.querySelector('#document h1')!.textContent).toBe('Hello');
+});
+
+it('prepares AI handoff locally and opens the service without putting the document in its URL', async () => {
+  await start();
+  await openFile('/docs/a.md');
+  document.querySelector<HTMLButtonElement>('#ai-translate')!.click();
+  const field = document.querySelector<HTMLTextAreaElement>('#ai-prompt')!;
+  expect(field.value).toContain('# 문서');
+  expect(mocks.invoke.mock.calls.some(call => call[0] === 'translate_text')).toBe(false);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('Unavailable')) } });
+  document.querySelector<HTMLButtonElement>('#ai-copy')!.click();
+  await vi.waitFor(() => expect(document.querySelector('#ai-status')!.textContent).toContain('Ctrl+C'));
+  expect(field.selectionEnd).toBe(field.value.length);
+  document.querySelector<HTMLButtonElement>('[data-ai-url]')!.click();
+  await vi.waitFor(() => expect(mocks.openUrl).toHaveBeenCalledWith('https://chatgpt.com/'));
 });

@@ -7,6 +7,7 @@ use std::{
     sync::Mutex,
 };
 use tauri::{Emitter, Manager};
+mod translation;
 
 #[derive(Default)]
 struct Pending(Mutex<Option<String>>);
@@ -80,7 +81,11 @@ fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![read_document, take_pending])
+        .invoke_handler(tauri::generate_handler![
+            read_document,
+            take_pending,
+            translation::translate_text
+        ])
         .setup(|app| {
             if let Some(path) = std::env::args_os()
                 .skip(1)
