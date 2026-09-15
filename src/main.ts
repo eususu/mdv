@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { documentUrl, localPath, renderMarkdown } from './markdown';
+import { renderDiagrams } from './diagrams';
 import './style.css';
 
 const native = isTauri();
@@ -119,6 +120,7 @@ function show(content: string, path: string, name?: string) {
     try { const url = new URL(src, documentUrl(path)); if (url.protocol === 'file:') img.src = convertFileSrc(localPath(url)); } catch { img.removeAttribute('src'); }
   });
   $('#reader').scrollTop = 0;
+  void renderDiagrams(article);
 }
 async function load(path: string) {
   const request = ++generation;
@@ -150,7 +152,7 @@ $('#reload').onclick = () => { if (currentPath) void load(currentPath); };
 $<HTMLInputElement>('#browser-file').onchange = event => { const input = event.target as HTMLInputElement; void browserFile(input.files?.[0]); input.value = ''; };
 const savedTheme = localStorage.getItem('mdv-theme');
 document.documentElement.dataset.theme = savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-$('#theme').onclick = () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = theme; localStorage.setItem('mdv-theme', theme); };
+$('#theme').onclick = () => { const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = theme; localStorage.setItem('mdv-theme', theme); void renderDiagrams($('#document')); };
 document.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'o') { event.preventDefault(); void choose(); } });
 $('#document').onclick = async event => {
   const anchor = (event.target as HTMLElement).closest('a'); if (!anchor) return;
