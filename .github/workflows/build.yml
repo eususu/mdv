@@ -1,8 +1,14 @@
 name: Build desktop apps
 on:
   push:
+    tags:
+      - 'v*' # 중요: v1.0.0 같은 태그를 푸시할 때만 동작하도록 설정
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write # GitHub 릴리즈에 파일을 업로드하기 위한 필수 권한
+
 jobs:
   build:
     strategy:
@@ -20,10 +26,22 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run tauri build
+
+      # 기존 Artifact 업로드는 Actions 탭에서 개별 확인용으로 남겨둡니다.
       - uses: actions/upload-artifact@v4
         with:
           name: mdv-${{ matrix.os }}
           path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/dmg/*.dmg
+
+      # ✅ 릴리즈 페이지에 파일 업로드
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') # 태그 푸시일 때만 실행
+        with:
+          files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/dmg/*.dmg
