@@ -18,14 +18,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
-      - run: npm ci
-      - run: npm test
-      - run: npm run tauri build
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm tauri build
 
       # 기존 Artifact 업로드는 Actions 탭에서 개별 확인용으로 남겨둡니다.
       - uses: actions/upload-artifact@v4

@@ -29,7 +29,7 @@ $('#app').innerHTML = `
     <button class="open-button" id="open">＋ <span>파일 열기</span><kbd>⌘ / Ctrl O</kbd></button>
     <section class="recent-section" aria-labelledby="recent-heading"><div class="recent-heading"><h2 id="recent-heading" class="section-label">최근 열어본 파일</h2><button id="clear-recent" title="최근 파일 목록 전체 지우기">지우기</button></div><ul id="recent-files"></ul><p id="recent-empty" class="muted">최근 열어본 파일이 없습니다.</p><p class="muted" id="recent-session" ${native ? 'hidden' : ''}>이 브라우저 세션 동안 유지됩니다.</p></section>
     <div class="section-label">이 문서의 목차</div><nav id="toc" aria-label="문서 목차"><p class="muted">문서를 열면 목차가 표시됩니다.</p></nav>
-    <div class="sidebar-bottom"><span class="status-dot"></span>읽기에 집중하는 공간<span>v0.1</span></div></aside>
+    <div class="sidebar-bottom"><span class="status-dot"></span>읽기에 집중하는 공간<span>v0.2</span></div></aside>
   <main><header><div class="file-label"><span>▤</span><span id="filename">시작하기</span></div><div class="toolbar"><button id="reload" title="파일 다시 읽기" disabled>↻</button><button id="theme" title="밝은 / 어두운 테마 전환">◐</button></div></header>
     <div id="error" role="alert" hidden></div>
     <div id="reader"><section id="welcome"><div class="eyebrow">A LITTLE SPACE FOR YOUR WORDS</div><h1>Markdown을,<br><span>편안하게 읽으세요.</span></h1><p>복잡한 도구 없이 문서에만 집중하세요.<br>파일을 열면, 읽기 좋은 페이지가 됩니다.</p><button id="welcome-open" class="primary">Markdown 파일 열기 <span>↗</span></button><div class="drop-hint">또는 이곳에 파일을 끌어다 놓으세요</div><div class="welcome-footer"><span>◎ OS 기본 WebView</span><span>↳ .md · .markdown · .mdown</span></div></section><article id="document" hidden></article></div>

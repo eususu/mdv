@@ -4,3 +4,5 @@ src-tauri/target/
 src-tauri/gen/
 .DS_Store
 *.log
+# pnpm을 사용하므로 npm 락파일은 커밋하지 않는다
+package-lock.json
