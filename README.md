@@ -9,6 +9,14 @@
 - mdv가 실행되어 md 파일을 html로 렌더링 해서 표시
 - html 렌더링은 해당 OS의 내장된 WebView를 활용한다
 
+## 설치 방법
+
+`macos`
+```bash
+% brew tap eususu/tap
+% brew install --cask eususu/tap/mdv
+```
+
 ---
 
 ## 구현: MDV
