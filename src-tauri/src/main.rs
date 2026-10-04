@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod document_watch;
+use notify::RecommendedWatcher;
 use std::{
     fs,
     io::Read,
@@ -7,6 +9,31 @@ use std::{
     sync::Mutex,
 };
 use tauri::{Emitter, Manager};
+
+#[derive(Default)]
+struct DocumentWatch(Mutex<Option<(PathBuf, RecommendedWatcher)>>);
+
+#[tauri::command]
+fn watch_document(
+    app: tauri::AppHandle,
+    state: tauri::State<DocumentWatch>,
+    path: String,
+) -> Result<(), String> {
+    let path = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    if !is_markdown(&path) || !path.is_file() {
+        return Err("Markdown 파일만 감시할 수 있습니다.".into());
+    }
+    let mut active = state.0.lock().map_err(|e| e.to_string())?;
+    if active.as_ref().is_some_and(|(current, _)| current == &path) {
+        return Ok(());
+    }
+    let watcher = document_watch::watch(&path, move |target| {
+        let _ = app.emit("document-changed", target.to_string_lossy().into_owned());
+    })
+    .map_err(|e| format!("파일 변경 감시를 시작할 수 없습니다: {e}"))?;
+    *active = Some((path, watcher));
+    Ok(())
+}
 
 #[derive(Default)]
 struct Pending(Mutex<Option<String>>);
@@ -73,6 +100,7 @@ fn queue_file(app: &tauri::AppHandle, path: PathBuf) {
 fn main() {
     let app = tauri::Builder::default()
         .manage(Pending::default())
+        .manage(DocumentWatch::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             if let Some(arg) = args.iter().skip(1).find(|arg| is_markdown(Path::new(arg))) {
                 queue_file(app, Path::new(&cwd).join(arg));
@@ -80,7 +108,11 @@ fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![read_document, take_pending])
+        .invoke_handler(tauri::generate_handler![
+            read_document,
+            take_pending,
+            watch_document
+        ])
         .setup(|app| {
             if let Some(path) = std::env::args_os()
                 .skip(1)

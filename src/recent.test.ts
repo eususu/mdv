@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), events: new Map<string, (event: { payload: string }) => void>() }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: mocks.invoke, convertFileSrc: (path: string) => path }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async (name: string, handler: (event: { payload: string }) => void) => { mocks.events.set(name, handler); return () => {}; }) }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ onDragDropEvent: vi.fn().mockResolvedValue(() => {}) }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.open }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
@@ -19,8 +19,10 @@ async function openFile(path: string) {
 }
 
 beforeEach(() => {
+  window.dispatchEvent(new Event('beforeunload'));
   vi.resetModules();
   vi.clearAllMocks();
+  mocks.events.clear();
   localStorage.clear();
   localStorage.setItem('mdv-theme', 'light');
   document.body.innerHTML = '<div id="app"></div>';
@@ -88,5 +90,59 @@ describe('recent documents', () => {
       expect(buttons()[0].title).toBe('/docs/a.md');
       expect(document.querySelector<HTMLElement>('#error')!.hidden).toBe(true);
     } finally { storage.mockRestore(); }
+  });
+});
+
+
+describe('live document updates', () => {
+  it('refreshes content and headings while preserving scroll and history', async () => {
+    await start();
+    await openFile('/docs/a.md');
+    await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith('watch_document', { path: '/docs/a.md' }));
+    const reader = document.querySelector<HTMLElement>('#reader')!;
+    reader.scrollTop = 240;
+    mocks.invoke.mockImplementation(async (command: string, args?: { path: string }) => command === 'read_document'
+      ? { path: args!.path, content: '# Updated\n\nNew text' } : null);
+    mocks.events.get('document-changed')!({ payload: '/docs/a.md' });
+    await vi.waitFor(() => expect(document.querySelector('#document')!.textContent).toContain('New text'));
+    expect(document.querySelector('#toc')!.textContent).toContain('Updated');
+    expect(reader.scrollTop).toBe(240);
+    expect(paths()).toEqual(['/docs/a.md']);
+  });
+
+  it('keeps the last good content on read failure and recovers on the next save', async () => {
+    await start();
+    await openFile('/docs/a.md');
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === 'read_document') throw '파일을 찾을 수 없습니다.';
+      return null;
+    });
+    mocks.events.get('document-changed')!({ payload: '/docs/a.md' });
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>('#error')!.hidden).toBe(false));
+    expect(document.querySelector('#document')!.textContent).toContain('문서');
+    mocks.invoke.mockImplementation(async (command: string, args?: { path: string }) => command === 'read_document'
+      ? { path: args!.path, content: '# 복구됨' } : null);
+    mocks.events.get('document-changed')!({ payload: '/docs/a.md' });
+    await vi.waitFor(() => expect(document.querySelector('#document')!.textContent).toContain('복구됨'));
+    expect(document.querySelector<HTMLElement>('#error')!.hidden).toBe(true);
+  });
+
+  it('discards an automatic read that finishes after a newer file is opened', async () => {
+    await start();
+    await openFile('/docs/a.md');
+    let finish!: (doc: { path: string; content: string }) => void;
+    mocks.invoke.mockImplementation(async (command: string, args?: { path: string }) => {
+      if (command !== 'read_document') return null;
+      if (args!.path === '/docs/a.md') return new Promise(resolve => { finish = resolve; });
+      return { path: args!.path, content: '# B' };
+    });
+    mocks.events.get('document-changed')!({ payload: '/docs/a.md' });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    await openFile('/docs/b.md');
+    finish({ path: '/docs/a.md', content: '# Stale A' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.querySelector('#location')!.textContent).toBe('/docs/b.md');
+    expect(document.querySelector('#document')!.textContent!.trim()).toBe('B');
+    expect(paths()).toEqual(['/docs/b.md', '/docs/a.md']);
   });
 });

@@ -26,6 +26,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: pnpm tauri build
 
       # 기존 Artifact 업로드는 Actions 탭에서 개별 확인용으로 남겨둡니다.

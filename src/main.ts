@@ -5,11 +5,16 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { documentUrl, localPath, renderMarkdown } from './markdown';
 import { renderDiagrams } from './diagrams';
+import { createAutoReload } from './auto-reload';
 import './style.css';
 
 const native = isTauri();
 let currentPath = '';
 let generation = 0;
+let currentContent = '';
+let opening = false;
+const autoReload = createAutoReload(() => opening ? '' : currentPath, path => load(path, true));
+window.addEventListener('beforeunload', () => { generation++; autoReload.dispose(); }, { once: true });
 type RecentFile = { path: string; name: string; file?: File };
 const recentKey = 'mdv-recent-files';
 const recentLimit = 10;
@@ -83,10 +88,12 @@ $('#clear-recent').onclick = () => { recentFiles = []; saveRecent(); };
 renderRecent();
 
 function error(reason: unknown) { $('#error').textContent = String(reason); $('#error').hidden = false; }
-function show(content: string, path: string, name?: string) {
+function show(content: string, path: string, name?: string, preserveScroll = false) {
+  const scrollTop = preserveScroll ? $('#reader').scrollTop : 0;
   const article = $('#document');
   article.innerHTML = renderMarkdown(content);
   currentPath = path;
+  currentContent = content;
   const filename = name || path.split(/[\\/]/).pop() || '문서';
   $('#filename').textContent = filename;
   $('#location').textContent = path || filename;
@@ -119,18 +126,43 @@ function show(content: string, path: string, name?: string) {
     const src = img.getAttribute('src'); if (!src) return;
     try { const url = new URL(src, documentUrl(path)); if (url.protocol === 'file:') img.src = convertFileSrc(localPath(url)); } catch { img.removeAttribute('src'); }
   });
-  $('#reader').scrollTop = 0;
+  $('#reader').scrollTop = scrollTop;
   void renderDiagrams(article);
 }
-async function load(path: string) {
-  const request = ++generation;
+async function load(path: string, automatic = false) {
+  const request = automatic ? generation : ++generation;
+  if (!automatic) opening = true;
+  const applicable = () => request === generation && (!automatic || (!opening && currentPath === path));
   try {
-    const doc = await invoke<{ path: string; content: string }>('read_document', { path });
-    if (request === generation) {
+    const read = () => invoke<{ path: string; content: string }>('read_document', { path });
+    let doc;
+    for (let attempt = 0; ; attempt++) {
+      try { doc = await read(); break; }
+      catch (reason) {
+        // File replacement and Windows sharing locks may briefly make a save unreadable.
+        if (!automatic || attempt === 2 || !applicable()) throw reason;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (!applicable()) return;
+      }
+    }
+    if (!applicable()) return;
+    if (automatic) {
+      if (doc.content !== currentContent) show(doc.content, doc.path, undefined, true);
+      $('#error').hidden = true;
+    } else {
       show(doc.content, doc.path);
       remember({ path: doc.path, name: doc.path.split(/[\\/]/).pop() || doc.path });
+      try {
+        await invoke('watch_document', { path: doc.path });
+        // Close the read/subscribe gap: a save may have happened while the watcher started.
+        if (request === generation) {
+          opening = false;
+          autoReload.changed(doc.path);
+        }
+      } catch (reason) { if (request === generation) error(reason); }
     }
-  } catch (reason) { if (request === generation) error(reason); }
+  } catch (reason) { if (applicable()) error(reason); }
+  finally { if (!automatic && request === generation) opening = false; }
 }
 async function choose() {
   if (!native) { $<HTMLInputElement>('#browser-file').click(); return; }
@@ -173,6 +205,7 @@ if (native) {
   // Subscribe before draining the pending path: Finder may send its event before the UI loads.
   const pending = async () => { const path = await invoke<string | null>('take_pending'); if (path) await load(path); };
   void (async () => {
+    await listen<string>('document-changed', event => { autoReload.changed(event.payload); });
     await listen('open-document', () => { void pending().catch(error); });
     await getCurrentWindow().onDragDropEvent(event => {
       $('#drop-overlay').hidden = event.payload.type !== 'over';
