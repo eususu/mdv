@@ -2,7 +2,7 @@
 
 mod document_path;
 mod document_watch;
-use notify::RecommendedWatcher;
+use document_watch::DocumentWatcher;
 use std::{
     fs,
     io::Read,
@@ -12,7 +12,7 @@ use std::{
 use tauri::{Emitter, Manager};
 
 #[derive(Default)]
-struct DocumentWatch(Mutex<Option<(PathBuf, String, RecommendedWatcher)>>);
+struct DocumentWatch(Mutex<Option<(PathBuf, String, DocumentWatcher)>>);
 
 #[tauri::command]
 fn watch_document(
