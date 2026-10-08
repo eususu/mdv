@@ -30,16 +30,36 @@ if (native) {
 }
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
 $('#app').innerHTML = `
-  <aside class="sidebar"><div class="brand"><span class="mark">M↓</span><span>mdv<span class="brand-caption">MARKDOWN VIEWER</span></span></div>
+  <aside id="sidebar" class="sidebar"><div class="brand"><span class="mark">M↓</span><span>mdv<span class="brand-caption">MARKDOWN VIEWER</span></span></div>
     <button class="open-button" id="open">＋ <span>파일 열기</span><kbd>⌘ / Ctrl O</kbd></button>
     <section class="recent-section" aria-labelledby="recent-heading"><div class="recent-heading"><h2 id="recent-heading" class="section-label">최근 열어본 파일</h2><button id="clear-recent" title="최근 파일 목록 전체 지우기">지우기</button></div><ul id="recent-files"></ul><p id="recent-empty" class="muted">최근 열어본 파일이 없습니다.</p><p class="muted" id="recent-session" ${native ? 'hidden' : ''}>이 브라우저 세션 동안 유지됩니다.</p></section>
     <div class="section-label">이 문서의 목차</div><nav id="toc" aria-label="문서 목차"><p class="muted">문서를 열면 목차가 표시됩니다.</p></nav>
     <div class="sidebar-bottom"><span class="status-dot"></span>읽기에 집중하는 공간<span>v0.2</span></div></aside>
-  <main><header><div class="file-label"><span>▤</span><span id="filename">시작하기</span></div><div class="toolbar"><button id="reload" title="파일 다시 읽기" disabled>↻</button><button id="theme" title="밝은 / 어두운 테마 전환">◐</button></div></header>
+  <main><header><div class="file-label"><button id="toggle-sidebar" aria-controls="sidebar" aria-expanded="true" aria-label="사이드바 접기" title="사이드바 접기"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path id="sidebar-arrow" d="m16 9-3 3 3 3"/></svg></button><span>▤</span><span id="filename">시작하기</span></div><div class="toolbar"><button id="reload" title="파일 다시 읽기" disabled>↻</button><button id="theme" title="밝은 / 어두운 테마 전환">◐</button></div></header>
     <div id="error" role="alert" hidden></div>
     <div id="reader"><section id="welcome"><div class="eyebrow">A LITTLE SPACE FOR YOUR WORDS</div><h1>Markdown을,<br><span>편안하게 읽으세요.</span></h1><p>복잡한 도구 없이 문서에만 집중하세요.<br>파일을 열면, 읽기 좋은 페이지가 됩니다.</p><button id="welcome-open" class="primary">Markdown 파일 열기 <span>↗</span></button><div class="drop-hint">또는 이곳에 파일을 끌어다 놓으세요</div><div class="welcome-footer"><span>◎ OS 기본 WebView</span><span>↳ .md · .markdown · .mdown</span></div></section><article id="document" hidden></article></div>
     <footer><span id="location">MDV · Markdown Viewer</span><span id="details">읽을 준비가 되었습니다</span></footer></main>
   <input id="browser-file" type="file" accept=".md,.markdown,.mdown" hidden><div id="drop-overlay" hidden>Markdown 파일을 놓아주세요</div>`;
+
+
+const sidebarKey = 'mdv-sidebar-collapsed';
+function setSidebarCollapsed(collapsed: boolean) {
+  $('#sidebar').hidden = collapsed;
+  const button = $('#toggle-sidebar');
+  const label = collapsed ? '사이드바 펼치기' : '사이드바 접기';
+  button.setAttribute('aria-expanded', String(!collapsed));
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  document.querySelector('#sidebar-arrow')!.setAttribute('d', collapsed ? 'm13 9 3 3-3 3' : 'm16 9-3 3 3 3');
+}
+try { setSidebarCollapsed(localStorage.getItem(sidebarKey) === 'true'); }
+catch { /* Use the default expanded sidebar if storage is unavailable. */ }
+$('#toggle-sidebar').onclick = () => {
+  const collapsed = !$('#sidebar').hidden;
+  setSidebarCollapsed(collapsed);
+  try { localStorage.setItem(sidebarKey, String(collapsed)); }
+  catch { /* The toggle remains usable without persistent storage. */ }
+};
 
 function renderRecent() {
   const list = $('#recent-files');
