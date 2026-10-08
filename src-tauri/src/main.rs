@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod document_path;
 mod document_watch;
 use notify::RecommendedWatcher;
 use std::{
@@ -11,7 +12,7 @@ use std::{
 use tauri::{Emitter, Manager};
 
 #[derive(Default)]
-struct DocumentWatch(Mutex<Option<(PathBuf, RecommendedWatcher)>>);
+struct DocumentWatch(Mutex<Option<(PathBuf, String, RecommendedWatcher)>>);
 
 #[tauri::command]
 fn watch_document(
@@ -19,19 +20,25 @@ fn watch_document(
     state: tauri::State<DocumentWatch>,
     path: String,
 ) -> Result<(), String> {
-    let path = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    let requested = path;
+    let path = fs::canonicalize(&requested).map_err(|e| e.to_string())?;
+    let display_path = document_path::display_path(&path, &requested);
     if !is_markdown(&path) || !path.is_file() {
         return Err("Markdown 파일만 감시할 수 있습니다.".into());
     }
     let mut active = state.0.lock().map_err(|e| e.to_string())?;
-    if active.as_ref().is_some_and(|(current, _)| current == &path) {
+    if active
+        .as_ref()
+        .is_some_and(|(current, display, _)| current == &path && display == &display_path)
+    {
         return Ok(());
     }
-    let watcher = document_watch::watch(&path, move |target| {
-        let _ = app.emit("document-changed", target.to_string_lossy().into_owned());
+    let event_path = display_path.clone();
+    let watcher = document_watch::watch(&path, move |_| {
+        let _ = app.emit("document-changed", &event_path);
     })
     .map_err(|e| format!("파일 변경 감시를 시작할 수 없습니다: {e}"))?;
-    *active = Some((path, watcher));
+    *active = Some((path, display_path, watcher));
     Ok(())
 }
 
@@ -51,7 +58,8 @@ fn is_markdown(path: &Path) -> bool {
 
 #[tauri::command]
 fn read_document(app: tauri::AppHandle, path: String) -> Result<Document, String> {
-    let path = fs::canonicalize(&path).map_err(|e| format!("파일을 찾을 수 없습니다: {e}"))?;
+    let requested = path;
+    let path = fs::canonicalize(&requested).map_err(|e| format!("파일을 찾을 수 없습니다: {e}"))?;
     if !is_markdown(&path) {
         return Err("Markdown 파일(.md, .markdown, .mdown)을 선택하세요.".into());
     }
@@ -75,7 +83,7 @@ fn read_document(app: tauri::AppHandle, path: String) -> Result<Document, String
             .map_err(|e| e.to_string())?;
     }
     Ok(Document {
-        path: path.to_string_lossy().into_owned(),
+        path: document_path::display_path(&path, &requested),
         content: content.trim_start_matches('\u{feff}').to_owned(),
     })
 }

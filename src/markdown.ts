@@ -10,10 +10,11 @@ export function renderMarkdown(source: string): string {
 }
 
 export function documentUrl(path: string): URL {
-  const normalized = path.replace(/\\/g, '/').replace(/^\/\/\?\//, '');
+  const normalized = path.replace(/\\/g, '/').replace(/^\/\/\?\/UNC\//i, '//').replace(/^\/\/\?\//, '');
   return new URL(`file://${normalized.startsWith('/') ? '' : '/'}${normalized.split('/').map(encodeURIComponent).join('/')}`);
 }
 export function localPath(url: URL): string {
   const path = decodeURIComponent(url.pathname);
+  if (url.hostname) return `//${url.hostname}${path}`;
   return /^\/[a-z]:\//i.test(path) ? path.slice(1) : path;
 }

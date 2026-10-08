@@ -29,3 +29,13 @@ describe('local document URLs', () => {
     expect(localPath(new URL('../other.md', documentUrl('C:\\docs\\nested\\file.md')))).toBe('C:/docs/other.md');
   });
 });
+
+
+describe('network document URLs', () => {
+  it.each([String.raw`\\172.16.10.15\docs\한글 #1.md`, String.raw`\\?\UNC\172.16.10.15\docs\한글 #1.md`])('preserves the share for %s', path => {
+    const url = new URL('./assets/a%20b.png', documentUrl(path));
+    expect(localPath(url)).toBe('//172.16.10.15/docs/assets/a b.png');
+    expect(url.hash).toBe('');
+    expect(localPath(new URL('../other.md', documentUrl(path)))).toBe('//172.16.10.15/other.md');
+  });
+});
